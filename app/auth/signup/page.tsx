@@ -1,58 +1,81 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useContext, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { AuthContext } from "@/app/context/AuthContext";
 
 export default function SignupPage() {
   const router = useRouter();
-  const [formData, setFormData] = useState({ email: "", password: "" });
+  const { user, login } = useContext(AuthContext)!; // Use AuthContext
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+  useEffect(() => {
+    if (user) router.push("/dashboard"); // Redirect if already logged in
+  }, [user, router]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Signing up with:", formData);
-    // TODO: Implement API call to register user
-    router.push("/auth/login"); // Redirect after successful signup
+    setError("");
+
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Signup failed");
+
+      login(data.token, data.userId); // Auto-login user after signup
+      router.push("/dashboard");
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-96">
-        <h2 className="text-2xl font-semibold text-center mb-4">Sign Up</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-lg">
+        <h2 className="text-2xl font-semibold text-center text-gray-700">
+          Sign Up
+        </h2>
+        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+        <form onSubmit={handleSignup} className="mt-4 space-y-3">
           <input
             type="email"
-            name="email"
             placeholder="Email"
-            value={formData.email}
-            onChange={handleChange}
-            className="w-full p-2 border rounded"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-4 py-2 border rounded-lg focus:outline-none"
             required
           />
           <input
             type="password"
-            name="password"
             placeholder="Password"
-            value={formData.password}
-            onChange={handleChange}
-            className="w-full p-2 border rounded"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-4 py-2 border rounded-lg focus:outline-none"
             required
           />
           <button
             type="submit"
-            className="w-full bg-green-500 text-white p-2 rounded hover:bg-green-600"
+            className="w-full bg-green-500 text-white py-2 rounded-lg"
           >
             Sign Up
           </button>
         </form>
-        <p className="text-sm mt-3 text-center">
+        <p className="mt-4 text-sm text-center text-gray-600">
           Already have an account?{" "}
-          <a href="/auth/login" className="text-blue-500">
+          <Link
+            href="/auth/login"
+            className="text-blue-500 font-semibold hover:underline"
+          >
             Login
-          </a>
+          </Link>
         </p>
       </div>
     </div>
