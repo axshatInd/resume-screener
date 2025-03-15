@@ -4,6 +4,8 @@ import path from "path";
 import fs from "fs";
 import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
+import natural from "natural";
+import Resume from "../models/Resume.js"; // Import Resume model
 
 const router = express.Router();
 
@@ -19,6 +21,28 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
+
+// Sample job description skills (these can be dynamically fetched)
+const jobSkills = ["JavaScript", "React", "Node.js", "MongoDB", "AWS"];
+
+// Function to extract keywords from resume text
+const extractKeywords = (text) => {
+  const tokenizer = new natural.WordTokenizer();
+  return tokenizer.tokenize(text).map((word) => word.toLowerCase());
+};
+
+// Compare extracted skills with job requirements
+const matchSkills = (extractedText) => {
+  const resumeKeywords = extractKeywords(extractedText);
+  return jobSkills.filter((skill) =>
+    resumeKeywords.includes(skill.toLowerCase())
+  );
+};
+
+// Ranking function (based on match count)
+const calculateRanking = (matchedSkills) => {
+  return (matchedSkills.length / jobSkills.length) * 100; // Percentage match
+};
 
 // Function to extract text from resumes
 const extractResumeText = async (filePath, mimetype) => {
@@ -36,7 +60,7 @@ const extractResumeText = async (filePath, mimetype) => {
   }
 };
 
-// Upload Resume API
+// Upload Resume API with MongoDB Storage
 router.post("/", upload.single("resume"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
@@ -44,28 +68,38 @@ router.post("/", upload.single("resume"), async (req, res) => {
 
   try {
     const extractedText = await extractResumeText(filePath, req.file.mimetype);
+    const matchedSkills = matchSkills(extractedText);
+    const rankingScore = calculateRanking(matchedSkills);
+
+    // Store in MongoDB
+    const resume = new Resume({
+      filename: req.file.filename,
+      extractedText,
+      matchedSkills,
+      rankingScore,
+    });
+    await resume.save();
+
     res.json({
       message: "Upload successful",
       file: req.file.filename,
       extractedText,
+      matchedSkills,
+      rankingScore, // Rank based on skill matching
     });
   } catch (error) {
     res.status(500).json({ error: "Error parsing the resume" });
   }
 });
 
-// Get Uploaded Resumes API
-router.get("/", (req, res) => {
-  fs.readdir(uploadDir, (err, files) => {
-    if (err) return res.status(500).json({ error: "Unable to read files" });
-
-    const resumes = files.map((file, index) => ({
-      id: index + 1,
-      name: file,
-      status: "Processing", // Default status, later update based on AI screening
-    }));
+// Fetch All Resumes API
+router.get("/", async (req, res) => {
+  try {
+    const resumes = await Resume.find().sort({ uploadedAt: -1 }); // Get all resumes
     res.json(resumes);
-  });
+  } catch (error) {
+    res.status(500).json({ error: "Error fetching resumes" });
+  }
 });
 
 export default router;
